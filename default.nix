@@ -35,17 +35,22 @@
       dontFixup = true;
       installPhase = let
         patchDir = ./patches;
-        # Apply patches from patches/<version>/ if the directory exists.
+        # Apply patches from patches/<version>/ (exact match) or patches/master/ (dev builds).
         versionPatchDir = patchDir + "/${version}";
-        hasVersionPatches = builtins.pathExists versionPatchDir;
-        versionPatchFiles = if hasVersionPatches then builtins.attrNames (builtins.readDir versionPatchDir) else [];
+        masterPatchDir = patchDir + "/master";
+        isDevBuild = lib.strings.hasInfix "-dev." version;
+        effectivePatchDir =
+          if builtins.pathExists versionPatchDir then versionPatchDir
+          else if isDevBuild && builtins.pathExists masterPatchDir then masterPatchDir
+          else null;
+        patchFiles = if effectivePatchDir != null then builtins.attrNames (builtins.readDir effectivePatchDir) else [];
       in ''
         mkdir -p $out/{doc,bin,lib}
         [ -d docs ] && cp -r docs/* $out/doc
         [ -d doc ] && cp -r doc/* $out/doc
         cp -r lib/* $out/lib
         chmod -R u+w $out/lib
-        ${lib.concatMapStringsSep "\n" (p: "patch -d $out -p1 < ${versionPatchDir}/${p}") versionPatchFiles}
+        ${lib.concatMapStringsSep "\n" (p: "patch -d $out -p1 < ${effectivePatchDir}/${p}") patchFiles}
         substituteInPlace $out/lib/std/zig/system.zig \
           --replace "/usr/bin/env" "${pkgs.lib.getExe' pkgs.coreutils "env"}"
         cp zig $out/bin/zig
