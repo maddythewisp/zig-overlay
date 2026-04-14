@@ -33,11 +33,17 @@
       dontConfigure = true;
       dontBuild = true;
       dontFixup = true;
-      installPhase = ''
+      installPhase = let
+        patchDir = ./patches;
+        hasPatches = builtins.pathExists patchDir;
+        patchFiles = if hasPatches then builtins.attrNames (builtins.readDir patchDir) else [];
+      in ''
         mkdir -p $out/{doc,bin,lib}
         [ -d docs ] && cp -r docs/* $out/doc
         [ -d doc ] && cp -r doc/* $out/doc
         cp -r lib/* $out/lib
+        chmod -R u+w $out/lib
+        ${lib.concatMapStringsSep "\n" (p: "patch -d $out -p1 < ${patchDir}/${p}") patchFiles}
         substituteInPlace $out/lib/std/zig/system.zig \
           --replace "/usr/bin/env" "${pkgs.lib.getExe' pkgs.coreutils "env"}"
         cp zig $out/bin/zig
